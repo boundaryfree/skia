@@ -15,6 +15,7 @@
 //#include "include/core/SkVertices.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/docs/SkPDFDocument.h"
+#include "include/effects/Sk2DPathEffect.h"
 
 #include <chrono>
 
@@ -156,10 +157,17 @@ void HelloWorld::onPaint(SkSurface* surface) {
 //            SkRect rect = SkRect::MakeXYWH((10 + w) * j, (10 + h) * i, w, h);
             SkPaint paint;
             paint.setColor({1* colorFactor, 0, 0, 1});
+            
+            SkMatrix lattice;
+            lattice.setScale(2.0f, 2.0f);
+            lattice.preRotate(30.0f);
+            paint.setPathEffect(SkLine2DPathEffect::Make(0.0f, lattice));
+            paint.setAntiAlias(true);
+            
             canvas->save();
             canvas->translate((10 + w) * j, (10 + h) * i);
-//            canvas->drawRect(rect, paint);
-            canvas->drawLine(0, 0, 20, 20, paint);
+            canvas->drawRect(rect, paint);
+//            canvas->drawLine(0, 0, 20, 20, paint);
             canvas->restore();
             colorFactor *= 0.9;
             if (colorFactor < 0.0001) {
