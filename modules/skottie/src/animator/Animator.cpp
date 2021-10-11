@@ -57,8 +57,21 @@ bool AnimatablePropertyContainer::bindImpl(const AnimationBuilder& abuilder,
     const auto& jpropA = (*jprop)["a"];
     const auto& jpropK = (*jprop)["k"];
 
-    if (!(*jprop)["x"].is<skjson::NullValue>()) {
-        abuilder.log(Logger::Level::kWarning, nullptr, "Unsupported expression.");
+    // Handle expressions on the property.
+    if (const skjson::StringValue* expr = (*jprop)["x"]) {
+        if (!abuilder.expression_manager()) {
+            abuilder.log(Logger::Level::kWarning, jprop,
+                         "Expression encountered but ExpressionManager not provided.");
+        } else {
+            builder.parseValue(abuilder, jpropK);
+            sk_sp<Animator> expression_animator = builder.makeFromExpression(
+                                                    *abuilder.expression_manager(),
+                                                    expr->begin());
+            if (expression_animator) {
+                fAnimators.push_back(std::move(expression_animator));
+                return true;
+            }
+        }
     }
 
     // Older Json versions don't have an "a" animation marker.

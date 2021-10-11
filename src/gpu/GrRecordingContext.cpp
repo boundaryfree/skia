@@ -17,14 +17,14 @@
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/SkGr.h"
+#include "src/gpu/SurfaceContext.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/text/GrTextBlob.h"
 #include "src/gpu/text/GrTextBlobCache.h"
 
 #if SK_GPU_V1
-#include "src/gpu/ops/GrAtlasTextOp.h"
+#include "src/gpu/ops/AtlasTextOp.h"
 #endif
 
 GrRecordingContext::ProgramData::ProgramData(std::unique_ptr<const GrProgramDesc> desc,
@@ -49,7 +49,7 @@ GrRecordingContext::GrRecordingContext(sk_sp<GrContextThreadSafeProxy> proxy, bo
 
 GrRecordingContext::~GrRecordingContext() {
 #if SK_GPU_V1
-    GrAtlasTextOp::ClearCache();
+    skgpu::v1::AtlasTextOp::ClearCache();
 #endif
 }
 
@@ -66,7 +66,7 @@ bool GrRecordingContext::init() {
     }
 
 #if SK_GPU_V1
-    GrPathRendererChain::Options prcOptions;
+    skgpu::v1::PathRendererChain::Options prcOptions;
     prcOptions.fAllowPathMaskCaching = this->options().fAllowPathMaskCaching;
 #if GR_TEST_UTILS
     prcOptions.fGpuPathRenderers = this->options().fGpuPathRenderers;

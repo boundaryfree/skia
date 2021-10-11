@@ -361,16 +361,13 @@ function fontMgrTests(CK: CanvasKit) {
     fm.countFamilies();
     fm.getFamilyName(0);
 
-    const tf = fm.makeTypefaceFromData(buff1); // $ExpectType Typeface
+    const tf = fm.MakeTypefaceFromData(buff1); // $ExpectType Typeface
 }
 
 function globalTests(CK: CanvasKit, path?: Path) {
     if (!path) {
         return;
     }
-    const ctx = CK.currentContext();
-    CK.setCurrentContext(ctx);
-    CK.deleteContext(ctx);
     const n = CK.getDecodeCacheLimitBytes();
     const u = CK.getDecodeCacheUsedBytes();
     CK.setDecodeCacheLimitBytes(1000);
@@ -706,7 +703,7 @@ function skottieTests(CK: CanvasKit, canvas?: Canvas) {
     });
     mAnim.setColor('slider', CK.WHITE);
     mAnim.setOpacity('slider', 0.8);
-    const e = mAnim.getMarkers();  // $ExpectType object[]
+    const e = mAnim.getMarkers();  // $ExpectType AnimationMarker[]
     const f = mAnim.getColorProps();  // $ExpectType ColorProperty[]
     const g = mAnim.getOpacityProps();  // $ExpectType OpacityProperty[]
     const h = mAnim.getTextProps();  // $ExpectType TextProperty[]
@@ -871,12 +868,13 @@ function surfaceTests(CK: CanvasKit, gl?: WebGLRenderingContext) {
     surfaceSeven.delete();
 
     const ctx = CK.GetWebGLContext(canvasEl); // $ExpectType number
+    CK.deleteContext(ctx);
     const grCtx = CK.MakeGrContext(ctx);
-    const surfaceNine = CK.MakeOnScreenGLSurface(grCtx, 100, 400, // $ExpectType Surface
+    const surfaceNine = CK.MakeOnScreenGLSurface(grCtx!, 100, 400, // $ExpectType Surface
         CK.ColorSpace.ADOBE_RGB)!;
 
-    const rt = CK.MakeRenderTarget(grCtx, 100, 200); // $ExpectType Surface | null
-    const rt2 = CK.MakeRenderTarget(grCtx, { // $ExpectType Surface | null
+    const rt = CK.MakeRenderTarget(grCtx!, 100, 200); // $ExpectType Surface | null
+    const rt2 = CK.MakeRenderTarget(grCtx!, { // $ExpectType Surface | null
         width: 79,
         height: 205,
         colorType: CK.ColorType.RGBA_8888,

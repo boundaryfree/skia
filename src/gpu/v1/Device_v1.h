@@ -15,6 +15,7 @@
 #include "include/gpu/GrTypes.h"
 #include "src/gpu/BaseDevice.h"
 #include "src/gpu/SkGr.h"
+#include "src/gpu/v1/ClipStack.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 class SkSpecialImage;
@@ -22,25 +23,13 @@ class SkSurface;
 class SkSurface_Gpu;
 class SkVertices;
 
-#if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
-    #include "src/gpu/GrClipStack.h"
-    #define GR_CLIP_STACK GrClipStack
-#else
-    #include "src/gpu/GrClipStackClip.h"
-    #define GR_CLIP_STACK GrClipStackClip
-#endif
-
 namespace skgpu::v1 {
 
 /**
  *  Subclass of BaseDevice, which directs all drawing to the GrGpu owned by the canvas.
  */
-class Device : public BaseDevice  {
+class Device final : public BaseDevice  {
 public:
-    GrSurfaceProxyView readSurfaceView() override {
-        return fSurfaceDrawContext->readSurfaceView();
-    }
-
     bool wait(int numSemaphores,
               const GrBackendSemaphore* waitSemaphores,
               bool deleteSemaphoresAfterWait) override;
@@ -106,7 +95,7 @@ public:
 
     SurfaceDrawContext* surfaceDrawContext() override;
     const SurfaceDrawContext* surfaceDrawContext() const;
-    GrSurfaceFillContext* surfaceFillContext() override;
+    skgpu::SurfaceFillContext* surfaceFillContext() override;
 
     // set all pixels to 0
     void clearAll();
@@ -159,7 +148,6 @@ protected:
     bool onReadPixels(const SkPixmap&, int, int) override;
     bool onWritePixels(const SkPixmap&, int, int) override;
 
-#if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
     void onSave() override { fClip.save(); }
     void onRestore() override { fClip.restore(); }
 
@@ -185,38 +173,21 @@ protected:
     ClipType onGetClipType() const override;
     bool onClipIsAA() const override;
 
-    void onSetDeviceClipRestriction(SkIRect* mutableClipRestriction) override {
-        if (!mutableClipRestriction->isEmpty()) {
-            // Just apply the clip restriction as a device-space intersection. No need to
-            // remember it for expanding clip ops since those shouldn't be used with GrClipStack.
-            fClip.clipRect(this->globalToDevice().asM33(), SkRect::Make(*mutableClipRestriction),
-                           GrAA::kNo, SkClipOp::kIntersect);
-        }
-    }
     bool onClipIsWideOpen() const override {
-        return fClip.clipState() == GrClipStack::ClipState::kWideOpen;
+        return fClip.clipState() == ClipStack::ClipState::kWideOpen;
     }
     SkIRect onDevClipBounds() const override { return fClip.getConservativeBounds(); }
-#endif
 
 private:
     std::unique_ptr<SurfaceDrawContext> fSurfaceDrawContext;
 
-    GR_CLIP_STACK fClip;
-
-    enum Flags {
-        kNeedClear_Flag = 1 << 0,  //!< Surface requires an initial clear
-        kIsOpaque_Flag  = 1 << 1,  //!< Hint from client that rendering to this device will be
-                                   //   opaque even if the config supports alpha.
-    };
-    static bool CheckAlphaTypeAndGetFlags(const SkImageInfo* info, InitContents init,
-                                          unsigned* flags);
+    ClipStack fClip;
 
     static sk_sp<BaseDevice> Make(std::unique_ptr<SurfaceDrawContext>,
-                                  const SkImageInfo*,
+                                  SkAlphaType,
                                   InitContents);
 
-    Device(std::unique_ptr<SurfaceDrawContext>, unsigned flags);
+    Device(std::unique_ptr<SurfaceDrawContext>, DeviceFlags);
 
     SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) override;
 
@@ -243,16 +214,6 @@ private:
                          const SkRect& dst,
                          SkFilterMode,
                          const SkPaint&);
-
-    static std::unique_ptr<SurfaceDrawContext> MakeSurfaceDrawContext(GrRecordingContext*,
-                                                                      SkBudgeted,
-                                                                      const SkImageInfo&,
-                                                                      SkBackingFit,
-                                                                      int sampleCount,
-                                                                      GrMipmapped,
-                                                                      GrProtected,
-                                                                      GrSurfaceOrigin,
-                                                                      const SkSurfaceProps&);
 
     friend class ::SkSurface_Gpu;      // for access to surfaceProps
     using INHERITED = BaseDevice;

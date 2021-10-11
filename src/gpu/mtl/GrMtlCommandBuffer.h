@@ -13,11 +13,13 @@
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
 #include "src/gpu/GrBuffer.h"
+#include "src/gpu/GrManagedResource.h"
 #include "src/gpu/GrRefCnt.h"
 #include "src/gpu/GrSurface.h"
 #include "src/gpu/mtl/GrMtlRenderCommandEncoder.h"
 #include "src/gpu/mtl/GrMtlUtil.h"
 
+class GrMtlEvent;
 class GrMtlGpu;
 class GrMtlPipelineState;
 class GrMtlOpsRenderPass;
@@ -40,12 +42,22 @@ public:
     }
 
     id<MTLBlitCommandEncoder> getBlitCommandEncoder();
+    // Tries to reuse current renderCommandEncoder if possible
     GrMtlRenderCommandEncoder* getRenderCommandEncoder(MTLRenderPassDescriptor*,
                                                        const GrMtlPipelineState*,
                                                        GrMtlOpsRenderPass* opsRenderPass);
+    // Replaces current renderCommandEncoder with new one
+    GrMtlRenderCommandEncoder* getRenderCommandEncoder(MTLRenderPassDescriptor*,
+                                                       GrMtlOpsRenderPass*);
 
     void addCompletedHandler(MTLCommandBufferHandler block) {
         [fCmdBuffer addCompletedHandler:block];
+    }
+
+    void addResource(sk_sp<const GrManagedResource> resource) {
+// Disable generic resource tracking for now
+//        SkASSERT(resource);
+//        fTrackedResources.push_back(std::move(resource));
     }
 
     void addGrBuffer(sk_sp<const GrBuffer> buffer) {
@@ -56,8 +68,8 @@ public:
         fTrackedGrSurfaces.push_back(std::move(surface));
     }
 
-    void encodeSignalEvent(id<MTLEvent>, uint64_t value) SK_API_AVAILABLE(macos(10.14), ios(12.0));
-    void encodeWaitForEvent(id<MTLEvent>, uint64_t value) SK_API_AVAILABLE(macos(10.14), ios(12.0));
+    void encodeSignalEvent(sk_sp<GrMtlEvent>, uint64_t value);
+    void encodeWaitForEvent(sk_sp<GrMtlEvent>, uint64_t value);
 
     void waitUntilCompleted() {
         [fCmdBuffer waitUntilCompleted];
@@ -92,6 +104,7 @@ private:
 
     static const int kInitialTrackedResourcesCount = 32;
 
+    SkSTArray<kInitialTrackedResourcesCount, sk_sp<const GrManagedResource>> fTrackedResources;
     SkSTArray<kInitialTrackedResourcesCount, sk_sp<const GrBuffer>> fTrackedGrBuffers;
     SkSTArray<16, gr_cb<const GrSurface>> fTrackedGrSurfaces;
 

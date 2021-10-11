@@ -12,7 +12,7 @@
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrSurfaceFillContext.h"
+#include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 #include "src/image/SkImage_Base.h"
@@ -292,13 +292,13 @@ static void check_base_readbacks(GrDirectContext* dContext,
             // TODO: we need a better way to tell a priori if readPixels will work for an
             // arbitrary colorType
 #if 0
-            ERRORF(reporter, "Couldn't readback from GrSurfaceContext for colorType: %d\n",
+            ERRORF(reporter, "Couldn't readback from SurfaceContext for colorType: %d\n",
                    colorType);
 #endif
         } else {
             auto name = SkStringPrintf("%s::readPixels",
-                                       (renderableCtx == GrRenderable::kYes ? "GrSurfaceFillContext"
-                                                                            : "GrSurfaceContext"));
+                                       (renderableCtx == GrRenderable::kYes ? "SurfaceFillContext"
+                                                                            : "SurfaceContext"));
             check_solid_pixmap(reporter, expectedColor, actual, colorType, label, name.c_str());
         }
     }
@@ -573,6 +573,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
         { kRGB_565_SkColorType,           SkColors::kRed           },
         { kARGB_4444_SkColorType,         SkColors::kGreen         },
         { kRGBA_8888_SkColorType,         SkColors::kBlue          },
+        { kSRGBA_8888_SkColorType,        { 0.25f, 0.5f, 0.75f, 1.0f}},
         { kRGB_888x_SkColorType,          SkColors::kCyan          },
         // TODO: readback is busted when alpha = 0.5f (perhaps premul vs. unpremul)
         { kBGRA_8888_SkColorType,         { 1, 0, 0, 1.0f }        },
@@ -798,10 +799,11 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest, reporter, ctxInfo) {
     };
 
     for (auto combo : combinations) {
-        for (GrGLenum target : {GR_GL_TEXTURE_2D, GR_GL_TEXTURE_RECTANGLE}) {
+        for (GrTextureType textureType : {GrTextureType::k2D, GrTextureType::kRectangle}) {
+            GrGLenum target = textureType == GrTextureType::k2D ? GR_GL_TEXTURE_2D
+                                                                : GR_GL_TEXTURE_RECTANGLE;
             GrBackendFormat format = GrBackendFormat::MakeGL(combo.fFormat, target);
-
-            if (!glCaps->isFormatTexturable(format)) {
+            if (!glCaps->isFormatTexturable(format, textureType)) {
                 continue;
             }
 

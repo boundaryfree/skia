@@ -357,7 +357,7 @@ void convert_noninflect_cubic_to_quads(const SkPoint p[4],
             // This introduced a large performance regression for tiny paths for no noticeable
             // quality improvement. However, we aren't quite fulfilling our contract of guaranteeing
             // the two tangent vectors and this could introduce a missed pixel in
-            // GrAAHairlinePathRenderer.
+            // AAHairlinePathRenderer.
             newC = (c0 + c1) * 0.5f;
         } else if (preserveFirstTangent) {
             newC = c0;
@@ -589,7 +589,7 @@ int GrPathUtils::findCubicConvex180Chops(const SkPoint pts[], float T[2], bool* 
     float2 D = p2 - p1;
     float2 E = p3 - p0;
     float2 B = D - C;
-    float2 A = grvx::fast_madd<2>(-3,D,E);
+    float2 A = -3*D + E;
 
     // Now find the cubic's inflection function. There are inflections where F' x F'' == 0.
     // We formulate this as a quadratic equation:  F' x F'' == aT^2 + bT + c == 0.

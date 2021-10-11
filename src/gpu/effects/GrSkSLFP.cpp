@@ -15,15 +15,13 @@
 #include "src/gpu/GrBaseContextPriv.h"
 #include "src/gpu/GrColorInfo.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
-
-class GrGLSLSkSLFP : public GrGLSLFragmentProcessor {
+class GrSkSLFP::Impl : public ProgramImpl {
 public:
     void emitCode(EmitArgs& args) override {
         const GrSkSLFP& fp            = args.fFp.cast<GrSkSLFP>();
@@ -31,7 +29,7 @@ public:
 
         class FPCallbacks : public SkSL::PipelineStage::Callbacks {
         public:
-            FPCallbacks(GrGLSLSkSLFP* self,
+            FPCallbacks(Impl* self,
                         EmitArgs& args,
                         const char* inputColor,
                         const SkSL::Context& context,
@@ -110,6 +108,10 @@ public:
                 }
             }
 
+            void declareFunction(const char* decl) override {
+                fArgs.fFragBuilder->emitFunctionPrototype(decl);
+            }
+
             void defineStruct(const char* definition) override {
                 fArgs.fFragBuilder->definitionAppend(definition);
             }
@@ -152,7 +154,7 @@ public:
                 return String(fSelf->invokeChild(index, src.c_str(), dst.c_str(), fArgs).c_str());
             }
 
-            GrGLSLSkSLFP*                 fSelf;
+            Impl*                         fSelf;
             EmitArgs&                     fArgs;
             const char*                   fInputColor;
             const SkSL::Context&          fContext;
@@ -220,6 +222,7 @@ public:
                 program, coords, args.fInputColor, args.fDestColor, &callbacks);
     }
 
+private:
     void onSetData(const GrGLSLProgramDataManager& pdman,
                    const GrFragmentProcessor& _proc) override {
         using Type = SkRuntimeEffect::Uniform::Type;
@@ -305,7 +308,7 @@ GrSkSLFP::GrSkSLFP(sk_sp<SkRuntimeEffect> effect, const char* name, OptFlags opt
 }
 
 GrSkSLFP::GrSkSLFP(const GrSkSLFP& other)
-        : INHERITED(kGrSkSLFP_ClassID, other.optimizationFlags())
+        : INHERITED(other)
         , fEffect(other.fEffect)
         , fName(other.fName)
         , fUniformSize(other.fUniformSize)
@@ -314,15 +317,6 @@ GrSkSLFP::GrSkSLFP(const GrSkSLFP& other)
                       other.uniformFlags(),
                       fEffect->uniforms().count() * sizeof(UniformFlags));
     sk_careful_memcpy(this->uniformData(), other.uniformData(), fUniformSize);
-
-    if (fEffect->usesSampleCoords()) {
-        this->setUsesSampleCoordsDirectly();
-    }
-    if (fEffect->allowBlender()) {
-        this->setIsBlendFunction();
-    }
-
-    this->cloneAndRegisterAllChildProcessors(other);
 }
 
 void GrSkSLFP::addChild(std::unique_ptr<GrFragmentProcessor> child, bool mergeOptFlags) {
@@ -353,11 +347,11 @@ void GrSkSLFP::setDestColorFP(std::unique_ptr<GrFragmentProcessor> destColorFP) 
     this->registerChild(std::move(destColorFP), SkSL::SampleUsage::PassThrough());
 }
 
-std::unique_ptr<GrGLSLFragmentProcessor> GrSkSLFP::onMakeProgramImpl() const {
-    return std::make_unique<GrGLSLSkSLFP>();
+std::unique_ptr<GrFragmentProcessor::ProgramImpl> GrSkSLFP::onMakeProgramImpl() const {
+    return std::make_unique<Impl>();
 }
 
-void GrSkSLFP::onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
+void GrSkSLFP::onAddToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
     // In the unlikely event of a hash collision, we also include the uniform size in the key.
     // That ensures that we will (at worst) use the wrong program, but one that expects the same
     // amount of uniform data.

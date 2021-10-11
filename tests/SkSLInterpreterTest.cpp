@@ -527,7 +527,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 
     auto build = [&](const SkSL::FunctionDefinition* fn) {
         skvm::Builder b;
-        skvm::Ptr uniformPtr = b.uniform();
+        skvm::UPtr uniformPtr = b.uniform();
         skvm::Val uniforms[16];
         for (int i = 0; i < 16; ++i) {
             uniforms[i] = b.uniform32(uniformPtr, i * sizeof(int)).id;
@@ -894,9 +894,9 @@ DEF_TEST(SkSLInterpreterExternalFunction, r) {
     GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
-    const char* src = "float main() { return external(25); }";
+    const char* src = "float main() { return externalSqrt(25); }";
     std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
-    externalFunctions.push_back(std::make_unique<ExternalSqrt>("external", compiler));
+    externalFunctions.push_back(std::make_unique<ExternalSqrt>("externalSqrt", compiler));
     settings.fExternalFunctions = &externalFunctions;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
             SkSL::ProgramKind::kGeneric, SkSL::String(src), settings);

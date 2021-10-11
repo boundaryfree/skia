@@ -10,6 +10,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrGpuResource.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -17,7 +18,6 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
@@ -98,7 +98,7 @@ public:
 
     const char* name() const override { return "test"; }
 
-    void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
+    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
         static std::atomic<int32_t> nextKey{0};
         b->add32(nextKey++);
     }
@@ -120,21 +120,18 @@ private:
         this->registerChild(std::move(child));
     }
 
-    explicit TestFP(const TestFP& that) : INHERITED(kTestFP_ClassID, that.optimizationFlags()) {
-        this->cloneAndRegisterAllChildProcessors(that);
-    }
+    explicit TestFP(const TestFP& that) : INHERITED(that) {}
 
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
-        class TestGLSLFP : public GrGLSLFragmentProcessor {
+    std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
+        class Impl : public ProgramImpl {
         public:
-            TestGLSLFP() {}
             void emitCode(EmitArgs& args) override {
                 args.fFragBuilder->codeAppendf("return half4(1);");
             }
 
         private:
         };
-        return std::make_unique<TestGLSLFP>();
+        return std::make_unique<Impl>();
     }
 
     bool onIsEqual(const GrFragmentProcessor&) const override { return false; }
@@ -205,14 +202,14 @@ static DEFINE_int(processorSeed, 0,
 
 #if GR_TEST_UTILS
 
-static GrColor input_texel_color(int i, int j, SkScalar delta) {
+static GrColor input_texel_color(int x, int y, SkScalar delta) {
     // Delta must be less than 0.5 to prevent over/underflow issues with the input color
     SkASSERT(delta <= 0.5);
 
-    SkColor color = SkColorSetARGB((uint8_t)(i & 0xFF),
-                                   (uint8_t)(j & 0xFF),
-                                   (uint8_t)((i + j) & 0xFF),
-                                   (uint8_t)((2 * j - i) & 0xFF));
+    SkColor color = SkColorSetARGB((uint8_t)(x & 0xFF),
+                                   (uint8_t)(y & 0xFF),
+                                   (uint8_t)((x + y) & 0xFF),
+                                   (uint8_t)((2 * y - x) & 0xFF));
     SkColor4f color4f = SkColor4f::FromColor(color);
     // We only apply delta to the r,g, and b channels. This is because we're using this
     // to test the canTweakAlphaForCoverage() optimization. A processor is allowed
@@ -228,10 +225,10 @@ static GrColor input_texel_color(int i, int j, SkScalar delta) {
 }
 
 // The output buffer must be the same size as the render-target context.
-void render_fp(GrDirectContext* dContext,
-               skgpu::v1::SurfaceDrawContext* sdc,
-               std::unique_ptr<GrFragmentProcessor> fp,
-               GrColor* outBuffer) {
+static void render_fp(GrDirectContext* dContext,
+                      skgpu::v1::SurfaceDrawContext* sdc,
+                      std::unique_ptr<GrFragmentProcessor> fp,
+                      GrColor* outBuffer) {
     sdc->fillWithFP(std::move(fp));
     std::fill_n(outBuffer, sdc->width() * sdc->height(), 0);
     auto ii = SkImageInfo::Make(sdc->dimensions(), kRGBA_8888_SkColorType, kPremul_SkAlphaType);
@@ -352,7 +349,7 @@ class TestFPGenerator {
 };
 
 // Creates an array of color values from input_texel_color(), to be used as an input texture.
-std::vector<GrColor> make_input_pixels(int width, int height, SkScalar delta) {
+static std::vector<GrColor> make_input_pixels(int width, int height, SkScalar delta) {
     std::vector<GrColor> pixel(width * height);
     for (int y = 0; y < width; ++y) {
         for (int x = 0; x < height; ++x) {
@@ -365,7 +362,7 @@ std::vector<GrColor> make_input_pixels(int width, int height, SkScalar delta) {
 
 // Creates a texture of premul colors used as the output of the fragment processor that precedes
 // the fragment processor under test. An array of W*H colors are passed in as the texture data.
-GrSurfaceProxyView make_input_texture(GrRecordingContext* context,
+static GrSurfaceProxyView make_input_texture(GrRecordingContext* context,
                                       int width, int height, GrColor* pixel) {
     SkImageInfo ii = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
     SkBitmap bitmap;
@@ -381,7 +378,7 @@ GrSurfaceProxyView make_input_texture(GrRecordingContext* context,
 // don't currently allow kUnpremul GrSurfaceDrawContexts.
 static constexpr auto kLogAlphaType = kUnpremul_SkAlphaType;
 
-bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
+static bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
     SkImageInfo info =
             SkImageInfo::Make(widthHeight, widthHeight, kRGBA_8888_SkColorType, kLogAlphaType);
     SkBitmap bmp;
@@ -389,7 +386,7 @@ bool log_pixels(GrColor* pixels, int widthHeight, SkString* dst) {
     return BipmapToBase64DataURI(bmp, dst);
 }
 
-bool log_texture_view(GrDirectContext* dContext, GrSurfaceProxyView src, SkString* dst) {
+static bool log_texture_view(GrDirectContext* dContext, GrSurfaceProxyView src, SkString* dst) {
     SkImageInfo ii = SkImageInfo::Make(src.proxy()->dimensions(), kRGBA_8888_SkColorType,
                                        kLogAlphaType);
 
@@ -400,7 +397,7 @@ bool log_texture_view(GrDirectContext* dContext, GrSurfaceProxyView src, SkStrin
     return BipmapToBase64DataURI(bm, dst);
 }
 
-bool fuzzy_color_equals(const SkPMColor4f& c1, const SkPMColor4f& c2) {
+static bool fuzzy_color_equals(const SkPMColor4f& c1, const SkPMColor4f& c2) {
     // With the loss of precision of rendering into 32-bit color, then estimating the FP's output
     // from that, it is not uncommon for a valid output to differ from estimate by up to 0.01
     // (really 1/128 ~ .0078, but frequently floating point issues make that tolerance a little
@@ -425,12 +422,12 @@ bool fuzzy_color_equals(const SkPMColor4f& c1, const SkPMColor4f& c2) {
 // confirms the conditions hold for the other two pairs.
 // It is required that the three input colors have the same alpha as fp is allowed to be a function
 // of the input alpha (but not r, g, or b).
-bool legal_modulation(const GrColor in[3], const GrColor out[3]) {
+static bool legal_modulation(const GrColor inGr[3], const GrColor outGr[3]) {
     // Convert to floating point, which is the number space the FP operates in (more or less)
     SkPMColor4f inf[3], outf[3];
     for (int i = 0; i < 3; ++i) {
-        inf[i]  = SkPMColor4f::FromBytes_RGBA(in[i]);
-        outf[i] = SkPMColor4f::FromBytes_RGBA(out[i]);
+        inf[i]  = SkPMColor4f::FromBytes_RGBA(inGr[i]);
+        outf[i] = SkPMColor4f::FromBytes_RGBA(outGr[i]);
     }
     // This test is only valid if all the input alphas are the same.
     SkASSERT(inf[0].fA == inf[1].fA && inf[1].fA == inf[2].fA);

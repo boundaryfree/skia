@@ -61,7 +61,7 @@ export interface CanvasKit {
      * In the CanvasKit canvas2d shim layer, we provide this map for processing
      * canvas2d calls, but not here for code size reasons.
      */
-    parseColorString(color: string, colorMap?: object): Color;
+    parseColorString(color: string, colorMap?: Record<string, Color>): Color;
 
     /**
      * Returns a copy of the passed in color with a new alpha value applied.
@@ -238,7 +238,7 @@ export interface CanvasKit {
      * Creates a GrDirectContext from the given WebGL Context.
      * @param ctx
      */
-    MakeGrContext(ctx: WebGLContextHandle): GrDirectContext;
+    MakeGrContext(ctx: WebGLContextHandle): GrDirectContext | null;
 
     /**
      * Creates a Surface that will be drawn to the given GrDirectContext (and show up on screen).
@@ -266,23 +266,6 @@ export interface CanvasKit {
      * @param info
      */
     MakeRenderTarget(ctx: GrDirectContext, info: ImageInfo): Surface | null;
-
-    /**
-     * Returns the current WebGLContext that the wasm code is configured to draw to. It is
-     * recommended to capture this value after creating a new WebGL surface if there are multiple
-     * surfaces on the screen.
-     */
-    currentContext(): WebGLContextHandle;
-
-    /**
-     * Sets the WebGLContext that the wasm code will draw to.
-     *
-     * When a WebGL call is made on the C++ side, it is routed to the JS side to target a specific
-     * WebGL context. WebGL calls are methods on a WebGL context, so CanvasKit needs to know which
-     * context to send the calls to.
-     * @param ctx
-     */
-    setCurrentContext(ctx: WebGLContextHandle): void;
 
     /**
      * Deletes the associated WebGLContext. Function not available on the CPU version.
@@ -538,7 +521,7 @@ export interface Camera {
 export interface EmbindObject<T extends EmbindObject<T>> {
     clone(): T;
     delete(): void;
-    deleteAfter(): void;
+    deleteLater(): void;
     isAliasOf(other: any): boolean;
     isDeleted(): boolean;
 }
@@ -579,7 +562,7 @@ export interface EmulatedCanvas2D {
      * @param bytes
      * @param descriptors
      */
-    loadFont(bytes: ArrayBuffer | Uint8Array, descriptors: object): void;
+    loadFont(bytes: ArrayBuffer | Uint8Array, descriptors: Record<string, string>): void;
 
     /**
      * Returns an new emulated Path2D object.
@@ -729,6 +712,15 @@ export interface MallocObj {
 }
 
 /**
+ * This represents a subset of an animation's duration.
+ */
+export interface AnimationMarker {
+    name: string;
+    t0: number; // 0.0 to 1.0
+    t1: number; // 0.0 to 1.0
+}
+
+/**
  * This object maintains a single audio layer during skottie playback
  */
 export interface AudioPlayer {
@@ -812,7 +804,7 @@ export interface ManagedSkottieAnimation extends SkottieAnimation {
     setColor(key: string, color: InputColor): boolean;
     setOpacity(key: string, opacity: number): boolean;
     setText(key: string, text: string, size: number): boolean;
-    getMarkers(): object[];
+    getMarkers(): AnimationMarker[];
     getColorProps(): ColorProperty[];
     getOpacityProps(): OpacityProperty[];
     getTextProps(): TextProperty[];
@@ -1183,7 +1175,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param top
      * @param paint
      */
-    drawImage(img: Image, left: number, top: number, paint?: Paint): void;
+    drawImage(img: Image, left: number, top: number, paint?: Paint | null): void;
 
     /**
      * Draws the given image with its top-left corner at (left, top) using the current clip,
@@ -1196,7 +1188,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawImageCubic(img: Image, left: number, top: number, B: number, C: number,
-                   paint: Paint | null): void;
+                   paint?: Paint | null): void;
 
     /**
      * Draws the given image with its top-left corner at (left, top) using the current clip,
@@ -1210,7 +1202,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawImageOptions(img: Image, left: number, top: number, fm: FilterMode,
-                     mm: MipmapMode, paint: Paint | null): void;
+                     mm: MipmapMode, paint?: Paint | null): void;
 
     /**
      *  Draws the provided image stretched proportionally to fit into dst rectangle.
@@ -1223,7 +1215,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawImageNine(img: Image, center: InputIRect, dest: InputRect, filter: FilterMode,
-                  paint?: Paint): void;
+                  paint?: Paint | null): void;
 
     /**
      * Draws sub-rectangle src from provided image, scaled and translated to fill dst rectangle.
@@ -1247,7 +1239,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawImageRectCubic(img: Image, src: InputRect, dest: InputRect,
-                       B: number, C: number, paint?: Paint): void;
+                       B: number, C: number, paint?: Paint | null): void;
 
     /**
      * Draws sub-rectangle src from provided image, scaled and translated to fill dst rectangle.
@@ -1261,7 +1253,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawImageRectOptions(img: Image, src: InputRect, dest: InputRect, fm: FilterMode,
-                         mm: MipmapMode, paint?: Paint): void;
+                         mm: MipmapMode, paint?: Paint | null): void;
 
     /**
      * Draws line segment from (x0, y0) to (x1, y1) using the current clip, current matrix,
@@ -1776,7 +1768,7 @@ export interface FontMgr extends EmbindObject<FontMgr> {
      * Create a typeface for the specified bytes and return it.
      * @param fontData
      */
-    makeTypefaceFromData(fontData: ArrayBuffer): Typeface;
+    MakeTypefaceFromData(fontData: ArrayBuffer): Typeface;
 }
 
 /**

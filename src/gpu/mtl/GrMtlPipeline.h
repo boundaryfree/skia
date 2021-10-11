@@ -12,13 +12,6 @@
 
 #import <Metal/Metal.h>
 
-class GrMtlGpu;
-class GrMtlPipelineStateDataManager;
-class GrMtlRenderCommandEncoder;
-class GrMtlSampler;
-class GrMtlTexture;
-class GrPipeline;
-
 /**
  * Wraps a MTLRenderPipelineState object
  */
@@ -40,7 +33,7 @@ public:
         fPipelineState = nil;
     }
 
-    id<MTLRenderPipelineState> mtlPipelineState() { return fPipelineState; }
+    id<MTLRenderPipelineState> mtlPipelineState() const { return fPipelineState; }
 
 private:
     GrMtlRenderPipeline(id<MTLRenderPipelineState> pso)

@@ -9,6 +9,7 @@
 
 #include "src/core/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
+#include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrVx.h"
 #include "src/gpu/geometry/GrPathUtils.h"
@@ -680,7 +681,7 @@ SK_ALWAYS_INLINE static bool cubic_has_cusp(const SkPoint p[4]) {
     float2 D = p2 - p1;
     float2 E = p3 - p0;
     float2 B = D - C;
-    float2 A = grvx::fast_madd<2>(-3, D, E);
+    float2 A = -3*D + E;
 
     float a = grvx::cross(A, B);
     float b = grvx::cross(A, C);
@@ -896,9 +897,14 @@ void GrStrokeHardwareTessellator::prepare(GrMeshDrawTarget* target, int totalCom
     }
 }
 
+#if SK_GPU_V1
+#include "src/gpu/GrOpFlushState.h"
+
 void GrStrokeHardwareTessellator::draw(GrOpFlushState* flushState) const {
     for (const auto& vertexChunk : fPatchChunks) {
         flushState->bindBuffers(nullptr, nullptr, vertexChunk.fBuffer);
         flushState->draw(vertexChunk.fCount, vertexChunk.fBase);
     }
 }
+
+#endif

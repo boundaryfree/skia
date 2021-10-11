@@ -20,6 +20,7 @@
 #include "tools/flags/CommandLineFlags.h"
 
 using namespace skia::text;
+using namespace skia::editor;
 
 namespace {
 class TextSample_HelloWorld : public Sample {
@@ -28,7 +29,7 @@ protected:
 
     void onDrawContent(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
-        Paint::drawText(u"Hello word", canvas, 0, 0);
+        skia::text::Paint::drawText(u"Hello word", canvas, 0, 0);
     }
 
 private:
@@ -46,7 +47,6 @@ protected:
                   const std::u16string& text,
                   TextAlign align,
                   TextDirection direction = TextDirection::kLtr) {
-        SkColor background = SK_ColorGRAY;
         const std::u16string& ellipsis = u"\u2026";
         SkScalar margin = 20;
 
@@ -55,10 +55,12 @@ protected:
         canvas->clipRect(SkRect::MakeWH(w, h));
         canvas->drawColor(SK_ColorWHITE);
 
+        SkPaint foregroundPaint(SkColors::kBlack);
+        SkPaint backgroundPaint(SkColors::kLtGray);
         Paint::drawText(direction == TextDirection::kRtl ? mirror(text) : normal(text),
                         canvas,
                         direction, align,
-                        SK_ColorBLACK, SK_ColorLTGRAY,
+                        foregroundPaint, backgroundPaint,
                         SkString("Roboto"), 12.0f, SkFontStyle::Normal(),
                         0, 0);
     }
@@ -151,7 +153,7 @@ protected:
             result += ch;
         }
         result += u"\u202C";
-        return fUnicode->convertUtf16ToUtf8(result);
+        return SkUnicode::convertUtf16ToUtf8(result);
     }
 
     void onDrawContent(SkCanvas* canvas) override {

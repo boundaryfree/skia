@@ -8,8 +8,7 @@
 #ifndef GrPathTessellationShader_DEFINED
 #define GrPathTessellationShader_DEFINED
 
-#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
-#include "src/gpu/tessellate/GrTessellationPathRenderer.h"
+#include "src/gpu/tessellate/GrTessTypes.h"
 #include "src/gpu/tessellate/shaders/GrTessellationShader.h"
 
 // This is the base class for shaders in the GPU tessellator that fill paths.
@@ -155,7 +154,7 @@ public:
     // Creates a pipeline that does not write to the color buffer.
     static const GrPipeline* MakeStencilOnlyPipeline(const ProgramArgs&,
                                                      GrAAType,
-                                                     GrTessellationPathRenderer::PathFlags,
+                                                     GrTessellationPathFlags,
                                                      const GrAppliedHardClip&);
 
 protected:
@@ -169,7 +168,7 @@ protected:
     }
 
     // Default path tessellation shader implementation that manages a uniform matrix and color.
-    class Impl : public GrGLSLGeometryProcessor {
+    class Impl : public ProgramImpl {
     public:
         void onEmitCode(EmitArgs&, GrGPArgs*) final;
         void setData(const GrGLSLProgramDataManager&, const GrShaderCaps&,

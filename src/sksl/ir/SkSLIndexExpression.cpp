@@ -8,6 +8,7 @@
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
+#include "src/sksl/ir/SkSLTypeReference.h"
 
 namespace SkSL {
 
@@ -36,21 +37,21 @@ std::unique_ptr<Expression> IndexExpression::Convert(const Context& context,
                                                      SymbolTable& symbolTable,
                                                      std::unique_ptr<Expression> base,
                                                      std::unique_ptr<Expression> index) {
-    // Convert an index expression with an expression inside of it: `arr[a * 3]`.
-    const Type& baseType = base->type();
-    if (base->is<TypeReference>() && index->is<IntLiteral>()) {
+    // Convert an array type reference: `int[10]`.
+    if (base->is<TypeReference>()) {
         const Type& baseType = base->as<TypeReference>().value();
-        if (baseType.isArray()) {
-            context.fErrors.error(base->fOffset, "multi-dimensional arrays are not supported");
+        SKSL_INT arraySize = baseType.convertArraySize(context, std::move(index));
+        if (!arraySize) {
             return nullptr;
         }
-        return std::make_unique<TypeReference>(context, /*offset=*/-1,
-                symbolTable.addArrayDimension(&baseType,
-                                              index->as<IntLiteral>().value()));
+        return TypeReference::Convert(context, base->fLine,
+                                      symbolTable.addArrayDimension(&baseType, arraySize));
     }
+    // Convert an index expression with an expression inside of it: `arr[a * 3]`.
+    const Type& baseType = base->type();
     if (!baseType.isArray() && !baseType.isMatrix() && !baseType.isVector()) {
-        context.fErrors.error(base->fOffset,
-                              "expected array, but found '" + baseType.displayName() + "'");
+        context.fErrors->error(base->fLine,
+                               "expected array, but found '" + baseType.displayName() + "'");
         return nullptr;
     }
     if (!index->type().isInteger()) {
@@ -61,14 +62,12 @@ std::unique_ptr<Expression> IndexExpression::Convert(const Context& context,
     }
     // Perform compile-time bounds checking on constant-expression indices.
     const Expression* indexExpr = ConstantFolder::GetConstantValueForVariable(*index);
-    if (indexExpr->is<IntLiteral>()) {
-        SKSL_INT indexValue = indexExpr->as<IntLiteral>().value();
-        const int upperBound = (baseType.isArray() && baseType.columns() == Type::kUnsizedArray)
-                                       ? INT_MAX
-                                       : baseType.columns();
-        if (indexValue < 0 || indexValue >= upperBound) {
-            context.fErrors.error(base->fOffset, "index " + to_string(indexValue) + " out of range "
-                                                 "for '" + baseType.displayName() + "'");
+    if (indexExpr->isIntLiteral()) {
+        SKSL_INT indexValue = indexExpr->as<Literal>().intValue();
+        if (indexValue < 0 || indexValue >= baseType.columns()) {
+            context.fErrors->error(base->fLine, "index " + to_string(indexValue) +
+                                                " out of range for '" + baseType.displayName() +
+                                                "'");
             return nullptr;
         }
     }
@@ -86,8 +85,8 @@ std::unique_ptr<Expression> IndexExpression::Make(const Context& context,
         // Constant array indexes on vectors can be converted to swizzles: `v[2]` --> `v.z`.
         // Swizzling is harmless and can unlock further simplifications for some base types.
         const Expression* indexExpr = ConstantFolder::GetConstantValueForVariable(*index);
-        if (indexExpr->is<IntLiteral>() && baseType.isVector()) {
-            SKSL_INT indexValue = indexExpr->as<IntLiteral>().value();
+        if (indexExpr->isIntLiteral() && baseType.isVector()) {
+            SKSL_INT indexValue = indexExpr->as<Literal>().intValue();
             return Swizzle::Make(context, std::move(base), ComponentArray{(int8_t)indexValue});
         }
     }

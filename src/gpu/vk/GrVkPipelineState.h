@@ -10,7 +10,9 @@
 #define GrVkPipelineState_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/GrRefCnt.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/vk/GrVkDescriptorSet.h"
 #include "src/gpu/vk/GrVkDescriptorSetManager.h"
 #include "src/gpu/vk/GrVkPipelineStateDataManager.h"
 
@@ -19,7 +21,6 @@ class GrStencilSettings;
 class GrVkBuffer;
 class GrVkCommandBuffer;
 class GrVkDescriptorPool;
-class GrVkDescriptorSet;
 class GrVkGpu;
 class GrVkImageView;
 class GrVkPipeline;
@@ -38,18 +39,17 @@ public:
     using UniformInfoArray = GrVkPipelineStateDataManager::UniformInfoArray;
     using UniformHandle = GrGLSLProgramDataManager::UniformHandle;
 
-    GrVkPipelineState(
-            GrVkGpu*,
-            sk_sp<const GrVkPipeline>,
-            const GrVkDescriptorSetManager::Handle& samplerDSHandle,
-            const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
-            const UniformInfoArray& uniforms,
-            uint32_t uniformSize,
-            bool usePushConstants,
-            const UniformInfoArray& samplers,
-            std::unique_ptr<GrGLSLGeometryProcessor>,
-            std::unique_ptr<GrGLSLXferProcessor>,
-            std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls);
+    GrVkPipelineState(GrVkGpu*,
+                      sk_sp<const GrVkPipeline>,
+                      const GrVkDescriptorSetManager::Handle& samplerDSHandle,
+                      const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
+                      const UniformInfoArray& uniforms,
+                      uint32_t uniformSize,
+                      bool usePushConstants,
+                      const UniformInfoArray& samplers,
+                      std::unique_ptr<GrGeometryProcessor::ProgramImpl>,
+                      std::unique_ptr<GrXferProcessor::ProgramImpl>,
+                      std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fpImpls);
 
     ~GrVkPipelineState();
 
@@ -105,9 +105,9 @@ private:
     GrGLSLBuiltinUniformHandles fBuiltinUniformHandles;
 
     // Processors in the GrVkPipelineState
-    std::unique_ptr<GrGLSLGeometryProcessor> fGeometryProcessor;
-    std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
-    std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fFPImpls;
+    std::unique_ptr<GrGeometryProcessor::ProgramImpl>              fGPImpl;
+    std::unique_ptr<GrXferProcessor::ProgramImpl>                  fXPImpl;
+    std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fFPImpls;
 
     GrVkPipelineStateDataManager fDataManager;
 

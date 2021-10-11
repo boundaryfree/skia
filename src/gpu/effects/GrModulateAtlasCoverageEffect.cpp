@@ -28,15 +28,13 @@ GrModulateAtlasCoverageEffect::GrModulateAtlasCoverageEffect(
 
 GrModulateAtlasCoverageEffect::GrModulateAtlasCoverageEffect(
         const GrModulateAtlasCoverageEffect& that)
-        : GrFragmentProcessor(kTessellate_GrModulateAtlasCoverageEffect_ClassID,
-                              kCompatibleWithCoverageAsAlpha_OptimizationFlag)
+        : GrFragmentProcessor(that)
         , fFlags(that.fFlags)
-        , fBounds(that.fBounds) {
-    this->cloneAndRegisterAllChildProcessors(that);
-}
+        , fBounds(that.fBounds) {}
 
-std::unique_ptr<GrGLSLFragmentProcessor> GrModulateAtlasCoverageEffect::onMakeProgramImpl() const {
-    class Impl : public GrGLSLFragmentProcessor {
+std::unique_ptr<GrFragmentProcessor::ProgramImpl>
+GrModulateAtlasCoverageEffect::onMakeProgramImpl() const {
+    class Impl : public ProgramImpl {
         void emitCode(EmitArgs& args) override {
             auto fp = args.fFp.cast<GrModulateAtlasCoverageEffect>();
             auto f = args.fFragBuilder;
@@ -65,6 +63,8 @@ std::unique_ptr<GrGLSLFragmentProcessor> GrModulateAtlasCoverageEffect::onMakePr
                            coverageMaybeInvertName, coverageMaybeInvertName);
             f->codeAppendf("return %s * coverage;", inputColor.c_str());
         }
+
+    private:
         void onSetData(const GrGLSLProgramDataManager& pdman,
                        const GrFragmentProcessor& processor) override {
             auto fp = processor.cast<GrModulateAtlasCoverageEffect>();
@@ -80,5 +80,6 @@ std::unique_ptr<GrGLSLFragmentProcessor> GrModulateAtlasCoverageEffect::onMakePr
         UniformHandle fBoundsUniform;
         UniformHandle fCoverageMaybeInvertUniform;
     };
+
     return std::make_unique<Impl>();
 }

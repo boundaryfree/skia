@@ -8,13 +8,12 @@
 #include "src/gpu/mtl/GrMtlPipelineState.h"
 
 #include "src/gpu/GrBackendUtils.h"
-#include "src/gpu/GrPipeline.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
-#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
-#include "src/gpu/glsl/GrGLSLXferProcessor.h"
 #include "src/gpu/mtl/GrMtlBuffer.h"
 #include "src/gpu/mtl/GrMtlFramebuffer.h"
 #include "src/gpu/mtl/GrMtlGpu.h"
@@ -32,26 +31,29 @@ GrMtlPipelineState::SamplerBindings::SamplerBindings(GrSamplerState state,
                                                      GrMtlGpu* gpu)
         : fTexture(static_cast<GrMtlTexture*>(texture)->mtlTexture()) {
     fSampler = gpu->resourceProvider().findOrCreateCompatibleSampler(state);
+    gpu->commandBuffer()->addResource(sk_ref_sp<GrManagedResource>(fSampler));
+    gpu->commandBuffer()->addGrSurface(
+            sk_ref_sp<GrSurface>(static_cast<GrMtlTexture*>(texture)->attachment()));
 }
 
 GrMtlPipelineState::GrMtlPipelineState(
-            GrMtlGpu* gpu,
-            sk_sp<GrMtlRenderPipeline> pipeline,
-            MTLPixelFormat pixelFormat,
-            const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
-            const UniformInfoArray& uniforms,
-            uint32_t uniformBufferSize,
-            uint32_t numSamplers,
-            std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
-            std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
-            std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls)
+        GrMtlGpu* gpu,
+        sk_sp<GrMtlRenderPipeline> pipeline,
+        MTLPixelFormat pixelFormat,
+        const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
+        const UniformInfoArray& uniforms,
+        uint32_t uniformBufferSize,
+        uint32_t numSamplers,
+        std::unique_ptr<GrGeometryProcessor::ProgramImpl> gpImpl,
+        std::unique_ptr<GrXferProcessor::ProgramImpl> xpImpl,
+        std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fpImpls)
         : fGpu(gpu)
-        , fPipeline(pipeline)
+        , fPipeline(std::move(pipeline))
         , fPixelFormat(pixelFormat)
         , fBuiltinUniformHandles(builtinUniformHandles)
         , fNumSamplers(numSamplers)
-        , fGeometryProcessor(std::move(geometryProcessor))
-        , fXferProcessor(std::move(xferProcessor))
+        , fGPImpl(std::move(gpImpl))
+        , fXPImpl(std::move(xpImpl))
         , fFPImpls(std::move(fpImpls))
         , fDataManager(uniforms, uniformBufferSize) {
     (void) fPixelFormat; // Suppress unused-var warning.
@@ -62,17 +64,18 @@ void GrMtlPipelineState::setData(GrMtlFramebuffer* framebuffer,
     SkISize colorAttachmentDimensions = framebuffer->colorAttachment()->dimensions();
 
     this->setRenderTargetState(colorAttachmentDimensions, programInfo.origin());
-    fGeometryProcessor->setData(fDataManager, *fGpu->caps()->shaderCaps(), programInfo.geomProc());
+    fGPImpl->setData(fDataManager, *fGpu->caps()->shaderCaps(), programInfo.geomProc());
 
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
-        auto& fp = programInfo.pipeline().getFragmentProcessor(i);
-        for (auto [fp, impl] : GrGLSLFragmentProcessor::ParallelRange(fp, *fFPImpls[i])) {
+        const auto& fp = programInfo.pipeline().getFragmentProcessor(i);
+        fp.visitWithImpls([&](const GrFragmentProcessor& fp,
+                              GrFragmentProcessor::ProgramImpl& impl) {
             impl.setData(fDataManager, fp);
-        }
+        }, *fFPImpls[i]);
     }
 
     programInfo.pipeline().setDstTextureUniforms(fDataManager, &fBuiltinUniformHandles);
-    fXferProcessor->setData(fDataManager, programInfo.pipeline().getXferProcessor());
+    fXPImpl->setData(fDataManager, programInfo.pipeline().getXferProcessor());
 
     fDataManager.resetDirtyBits();
 
@@ -85,6 +88,7 @@ void GrMtlPipelineState::setData(GrMtlFramebuffer* framebuffer,
 #endif
 
     fStencil = programInfo.nonGLStencilSettings();
+    fGpu->commandBuffer()->addResource(fPipeline);
 }
 
 void GrMtlPipelineState::setTextures(const GrGeometryProcessor& geomProc,
@@ -191,6 +195,7 @@ void GrMtlPipelineState::setDepthStencilState(GrMtlRenderCommandEncoder* renderC
         }
     }
     renderCmdEncoder->setDepthStencilState(state->mtlDepthStencil());
+    fGpu->commandBuffer()->addResource(sk_ref_sp<GrManagedResource>(state));
 }
 
 void GrMtlPipelineState::SetDynamicScissorRectState(GrMtlRenderCommandEncoder* renderCmdEncoder,
@@ -222,7 +227,8 @@ void GrMtlPipelineState::SetDynamicScissorRectState(GrMtlRenderCommandEncoder* r
 bool GrMtlPipelineState::doesntSampleAttachment(
         const MTLRenderPassAttachmentDescriptor* attachment) const {
     for (int i = 0; i < fSamplerBindings.count(); ++i) {
-        if (attachment.texture == fSamplerBindings[i].fTexture) {
+        if (attachment.texture == fSamplerBindings[i].fTexture ||
+            attachment.resolveTexture == fSamplerBindings[i].fTexture) {
             return false;
         }
     }

@@ -19,14 +19,15 @@
 #include "src/core/SkOpts.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkStrikeSpec.h"
-#include "src/core/SkTLList.h"
+#include "src/core/SkTInternalLList.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrSubRunAllocator.h"
+#if SK_GPU_V1
 #include "src/gpu/ops/GrOp.h"
+#endif
 
 class GrAtlasManager;
-class GrAtlasTextOp;
 class GrDeferredUploadTarget;
 class GrGlyph;
 class GrMeshDrawTarget;
@@ -38,9 +39,10 @@ class SkSurfaceProps;
 class SkTextBlob;
 class SkTextBlobRunIterator;
 
+namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
 
 // -- GrAtlasSubRun --------------------------------------------------------------------------------
-// GrAtlasSubRun is the API that GrAtlasTextOp uses to generate vertex data for drawing.
+// GrAtlasSubRun is the API that AtlasTextOp uses to generate vertex data for drawing.
 //     There are three different ways GrAtlasSubRun is specialized.
 //      * DirectMaskSubRun - this is by far the most common type of SubRun. The mask pixels are
 //        in 1:1 correspondence with the pixels on the device. The destination rectangles in this

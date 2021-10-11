@@ -142,14 +142,14 @@ protected:
                     style.setDecorationColor(std::get<5>(para));
                 }
                 builder.pushStyle(style);
-                std::string name = " " + std::get<0>(para) + " " +
-                                   (std::get<1>(para) ? ", bold" : "") +
-                                   (std::get<2>(para) ? ", italic" : "") + " " +
-                                   std::to_string(std::get<3>(para) * i) +
-                                   (std::get<4>(para) != bg ? ", background" : "") +
-                                   (std::get<5>(para) != fg ? ", foreground" : "") +
-                                   (std::get<6>(para) ? ", shadow" : "") +
-                                   (test ? ", decorations " + deco : "") + ";";
+                name = " " + std::get<0>(para) + " " +
+                       (std::get<1>(para) ? ", bold" : "") +
+                       (std::get<2>(para) ? ", italic" : "") + " " +
+                       std::to_string(std::get<3>(para) * i) +
+                       (std::get<4>(para) != bg ? ", background" : "") +
+                       (std::get<5>(para) != fg ? ", foreground" : "") +
+                       (std::get<6>(para) ? ", shadow" : "") +
+                       (test ? ", decorations " + deco : "") + ";";
                 builder.addText(name.c_str(), name.length());
                 builder.pop();
             }
@@ -1313,9 +1313,10 @@ protected:
         }
 
         for (auto& query : miss) {
-            auto miss = paragraph->getRectsForRange(query.fX, query.fY, RectHeightStyle::kTight,
-                                                    RectWidthStyle::kTight);
-            if (miss.empty()) {
+            auto missRects = paragraph->getRectsForRange(query.fX, query.fY,
+                                                         RectHeightStyle::kTight,
+                                                         RectWidthStyle::kTight);
+            if (missRects.empty()) {
             } else {
                 if (this->isVerbose()) {
                     SkDebugf("-[%d:%d): Bad\n", query.fX, query.fY);
@@ -3560,6 +3561,56 @@ protected:
 private:
     using INHERITED = Sample;
 };
+
+// Selection jumping back and forth on Chinese text
+class ParagraphView62 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("ParagraphView62"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        SkString text("");
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        //text_style.setFontFamilies({SkString("")});
+        text_style.setFontSize(24.0f);
+        text_style.setHeight(12.0f);
+        //text_style.setHeightOverride(true);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        builder.pushStyle(text_style);
+        //builder.addText("helloworld你好");
+        builder.addText("你好你好你好你好");
+        auto paragraph = builder.Build();
+        paragraph->layout(SK_ScalarInfinity);
+        paragraph->paint(canvas, 0, 0);
+
+        for (auto x = 0.0f; x < paragraph->getMaxIntrinsicWidth(); x += 5.0f) {
+            auto pos = paragraph->getGlyphPositionAtCoordinate(x, paragraph->getHeight() / 2);
+            auto p = pos.position + (pos.affinity == Affinity::kDownstream ? 1 : 0);
+            auto rects = paragraph->getRectsForRange(0, p,RectHeightStyle::kTight, RectWidthStyle::kTight);
+            SkDebugf("@x=%f [0:%d%s=%d) ",
+                     x, pos.position,
+                     pos.affinity == Affinity::kDownstream ? "D" : "U",
+                     p);
+            for (auto& rect : rects) {
+                SkDebugf("[%f:%f) ", rect.rect.left(), rect.rect.right());
+            }
+            SkDebugf("\n");
+        }
+
+        //auto rects130 = paragraph->getRectsForRange(0.0f, 130.0f, RectHeightStyle::kTight, RectWidthStyle::kTight);
+        //auto rects140 = paragraph->getRectsForRange(0.0f, 140.0f, RectHeightStyle::kTight, RectWidthStyle::kTight);
+    }
+
+private:
+    using INHERITED = Sample;
+};
 }  // namespace
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3622,3 +3673,4 @@ DEF_SAMPLE(return new ParagraphView58();)
 DEF_SAMPLE(return new ParagraphView59();)
 DEF_SAMPLE(return new ParagraphView60();)
 DEF_SAMPLE(return new ParagraphView61();)
+DEF_SAMPLE(return new ParagraphView62();)

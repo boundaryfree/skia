@@ -17,12 +17,10 @@
 
 class GrCaps;
 class GrContext_Base;
-class GrOpsTask;
 class GrRecordingContext;
 class GrRenderTargetProxy;
 class GrRenderTask;
 class GrResourceProvider;
-class GrSurfaceContext;
 class GrSurfaceProxyPriv;
 class GrSurfaceProxyView;
 class GrTextureProxy;
@@ -72,6 +70,7 @@ public:
         GrMipmapped fMipmapped;
         int fSampleCnt;
         const GrBackendFormat& fFormat;
+        GrTextureType fTextureType;
         GrProtected fProtected;
         SkBudgeted fBudgeted;
     };

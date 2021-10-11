@@ -10,50 +10,47 @@
 
 #include "include/core/SkImage.h"
 #include "include/private/GrTypesPriv.h"
+#include "src/core/SkDevice.h"
 
 class GrRenderTargetProxy;
-namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
-class GrSurfaceFillContext;
 class GrSurfaceProxyView;
-
-// NOTE: when not defined, SkGpuDevice extends SkBaseDevice directly and manages its clip stack
-// using GrClipStack. When false, SkGpuDevice continues to extend SkClipStackDevice and uses
-// SkClipStack and GrClipStackClip to manage the clip stack.
-#if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
-    // For staging purposes, disable this for Android Framework
-    #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
-        #define SK_DISABLE_NEW_GR_CLIP_STACK
-    #endif
-#endif
-
-#if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
-    #include "src/core/SkDevice.h"
-    #define BASE_DEVICE   SkBaseDevice
-#else
-    #include "src/core/SkClipStackDevice.h"
-    #define BASE_DEVICE   SkClipStackDevice
-#endif
 
 namespace skgpu {
 
-class BaseDevice : public BASE_DEVICE {
+class SurfaceContext;
+class SurfaceFillContext;
+#if SK_GPU_V1
+namespace v1 { class SurfaceDrawContext; }
+#endif // SK_GPU_V1
+
+/*
+ * The most important thing to remember about this class hierarchy is there is no skgpu::SDC
+ * base class so the v1 and v2 Devices privately hold their own version of the SDC. The best
+ * the BaseDevice can do is to return the SDC-variant as a generic SFC.
+ *
+ *                             skgpu::BaseDevice
+ *                           /                   \
+ *                     v1::Device           v2::Device
+ *                       - v1::SDC              - v2::SDC
+ */
+class BaseDevice : public SkBaseDevice {
 public:
-    enum InitContents {
-        kClear_InitContents,
-        kUninit_InitContents
+    enum class InitContents {
+        kClear,
+        kUninit
     };
 
     BaseDevice(sk_sp<GrRecordingContext>, const SkImageInfo&, const SkSurfaceProps&);
 
-    virtual GrSurfaceProxyView readSurfaceView() = 0;
+    GrSurfaceProxyView readSurfaceView();
 
     BaseDevice* asGpuDevice() override { return this; }
 
 #if SK_GPU_V1
-    virtual skgpu::v1::SurfaceDrawContext* surfaceDrawContext() { return nullptr; }
+    virtual v1::SurfaceDrawContext* surfaceDrawContext() { return nullptr; }
 #endif
 
-    virtual GrSurfaceFillContext* surfaceFillContext() = 0;
+    virtual SurfaceFillContext* surfaceFillContext() = 0;
     GrRenderTargetProxy* targetProxy();
     GrRecordingContext* recordingContext() const { return fContext.get(); }
 
@@ -92,14 +89,25 @@ public:
                                                  ReadPixelsContext context) = 0;
 
 protected:
+    enum class DeviceFlags {
+        kNone      = 0,
+        kNeedClear = 1 << 0,  //!< Surface requires an initial clear
+        kIsOpaque  = 1 << 1,  //!< Hint from client that rendering to this device will be
+                              //   opaque even if the config supports alpha.
+    };
+    GR_DECL_BITFIELD_CLASS_OPS_FRIENDS(DeviceFlags);
+
+    static bool CheckAlphaTypeAndGetFlags(SkAlphaType, InitContents, DeviceFlags*);
+    static SkImageInfo MakeInfo(SurfaceContext*,  DeviceFlags);
+
     sk_sp<GrRecordingContext> fContext;
 
 private:
-    using INHERITED = BASE_DEVICE;
+    using INHERITED = SkBaseDevice;
 };
 
-} // namespace skgpu
+GR_MAKE_BITFIELD_CLASS_OPS(BaseDevice::DeviceFlags)
 
-#undef BASE_DEVICE
+} // namespace skgpu
 
 #endif // BaseDevice_DEFINED

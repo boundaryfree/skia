@@ -20,9 +20,9 @@
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrSurfaceFillContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
+#include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 #endif
@@ -60,7 +60,7 @@ private:
     friend void ::SkRegisterArithmeticImageFilterFlattenable();
     SK_FLATTENABLE_HOOKS(SkArithmeticImageFilter)
 
-    bool affectsTransparentBlack() const override { return !SkScalarNearlyZero(fK[3]); }
+    bool onAffectsTransparentBlack() const override { return !SkScalarNearlyZero(fK[3]); }
 
     SkV4 fK;
     bool fEnforcePMColor;
@@ -315,8 +315,8 @@ std::unique_ptr<GrFragmentProcessor> make_arithmetic_fp(
         uniform half4 k;
         uniform half pmClamp;
         half4 main(float2 xy) {
-            half4 src = sample(srcFP, xy);
-            half4 dst = sample(dstFP, xy);
+            half4 src = srcFP.eval(xy);
+            half4 dst = dstFP.eval(xy);
             half4 color = saturate(k.x * src * dst +
                                    k.y * src +
                                    k.z * dst +

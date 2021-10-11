@@ -22,7 +22,6 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
@@ -74,9 +73,14 @@ private:
 
             const char* name() const override { return "Test GP"; }
 
-            GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const override {
-                class GLSLGP : public GrGLSLGeometryProcessor {
+            std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override {
+                class Impl : public ProgramImpl {
                 public:
+                    void setData(const GrGLSLProgramDataManager&,
+                                 const GrShaderCaps&,
+                                 const GrGeometryProcessor&) override {}
+
+                private:
                     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
                         const GP& gp = args.fGeomProc.cast<GP>();
                         args.fVaryingHandler->emitAttributes(gp);
@@ -86,14 +90,11 @@ private:
                         fragBuilder->codeAppendf("const half4 %s = half4(1);",
                                                  args.fOutputCoverage);
                     }
-                    void setData(const GrGLSLProgramDataManager&,
-                                 const GrShaderCaps&,
-                                 const GrGeometryProcessor&) override {}
                 };
-                return new GLSLGP();
+
+                return std::make_unique<Impl>();
             }
-            void getGLSLProcessorKey(const GrShaderCaps&,
-                                     GrProcessorKeyBuilder* builder) const override {
+            void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder* builder) const override {
                 builder->add32(fNumAttribs);
             }
 
@@ -129,6 +130,7 @@ private:
         fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps,
                                                                    arena,
                                                                    writeView,
+                                                                   usesMSAASurface,
                                                                    std::move(appliedClip),
                                                                    dstProxyView,
                                                                    gp,

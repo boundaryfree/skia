@@ -27,11 +27,12 @@ public:
 
 private:
     const char* name() const final { return "tessellate_SimpleTriangleShader"; }
-    void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const final {}
-    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
+    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const final {}
+    std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const final;
 };
 
-GrGLSLGeometryProcessor* SimpleTriangleShader::createGLSLInstance(const GrShaderCaps&) const {
+std::unique_ptr<GrGeometryProcessor::ProgramImpl> SimpleTriangleShader::makeProgramImpl(
+        const GrShaderCaps&) const {
     class Impl : public GrPathTessellationShader::Impl {
         void emitVertexCode(const GrShaderCaps&, const GrPathTessellationShader&,
                             GrGLSLVertexBuilder* v, GrGPArgs* gpArgs) override {
@@ -42,7 +43,7 @@ GrGLSLGeometryProcessor* SimpleTriangleShader::createGLSLInstance(const GrShader
             gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertexpos");
         }
     };
-    return new Impl;
+    return std::make_unique<Impl>();
 }
 
 }  // namespace
@@ -55,13 +56,10 @@ GrPathTessellationShader* GrPathTessellationShader::MakeSimpleTriangleShader(
 const GrPipeline* GrPathTessellationShader::MakeStencilOnlyPipeline(
         const ProgramArgs& args,
         GrAAType aaType,
-        GrTessellationPathRenderer::PathFlags pathFlags,
+        GrTessellationPathFlags pathFlags,
         const GrAppliedHardClip& hardClip) {
-    using PathFlags = GrTessellationPathRenderer::PathFlags;
+    using PathFlags = GrTessellationPathFlags;
     GrPipeline::InitArgs pipelineArgs;
-    if (aaType == GrAAType::kMSAA) {
-        pipelineArgs.fInputFlags |= GrPipeline::InputFlags::kHWAntialias;
-    }
     if (args.fCaps->wireframeSupport() && (pathFlags & PathFlags::kWireframe)) {
         pipelineArgs.fInputFlags |= GrPipeline::InputFlags::kWireframe;
     }

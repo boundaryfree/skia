@@ -23,6 +23,7 @@
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/mock/GrMockGpu.h"
+#include "src/gpu/ops/GrDrawOp.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 // This test verifies that lazy proxy callbacks get invoked during flush, after onFlush callbacks,
@@ -91,8 +92,14 @@ public:
                         } else {
                             static constexpr SkISize kDimensions = {1234, 567};
                             sk_sp<GrTexture> texture = rp->createTexture(
-                                    kDimensions, desc.fFormat, desc.fRenderable, desc.fSampleCnt,
-                                    desc.fMipmapped, desc.fBudgeted, desc.fProtected);
+                                    kDimensions,
+                                    desc.fFormat,
+                                    desc.fTextureType,
+                                    desc.fRenderable,
+                                    desc.fSampleCnt,
+                                    desc.fMipmapped,
+                                    desc.fBudgeted,
+                                    desc.fProtected);
                             REPORTER_ASSERT(fTest->fReporter, texture);
                             return texture;
                         }
@@ -157,10 +164,10 @@ public:
         std::unique_ptr<GrFragmentProcessor> clone() const override {
             return std::make_unique<ClipFP>(fContext, fProxyProvider, fTest, fAtlas);
         }
-        std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
+        std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
             return nullptr;
         }
-        void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+        void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
         bool onIsEqual(const GrFragmentProcessor&) const override { return false; }
 
         GrRecordingContext* const fContext;
@@ -238,9 +245,14 @@ DEF_GPUTEST(LazyProxyReleaseTest, reporter, /* options */) {
     GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                            GrRenderable::kNo);
 
-    auto tex = ctx->priv().resourceProvider()->createTexture({kSize, kSize}, format,
-                                                             GrRenderable::kNo, 1, GrMipmapped::kNo,
-                                                             SkBudgeted::kNo, GrProtected::kNo);
+    auto tex = ctx->priv().resourceProvider()->createTexture({kSize, kSize},
+                                                             format,
+                                                             GrTextureType::k2D,
+                                                             GrRenderable::kNo,
+                                                             1,
+                                                             GrMipmapped::kNo,
+                                                             SkBudgeted::kNo,
+                                                             GrProtected::kNo);
     using LazyInstantiationResult = GrSurfaceProxy::LazyCallbackResult;
     for (bool doInstantiate : {true, false}) {
         for (bool releaseCallback : {false, true}) {
@@ -345,8 +357,13 @@ private:
                         *testExecuteValue = 1;
                         return {};
                     }
-                    return {rp->createTexture(desc.fDimensions, desc.fFormat, desc.fRenderable,
-                                              desc.fSampleCnt, desc.fMipmapped, desc.fBudgeted,
+                    return {rp->createTexture(desc.fDimensions,
+                                              desc.fFormat,
+                                              desc.fTextureType,
+                                              desc.fRenderable,
+                                              desc.fSampleCnt,
+                                              desc.fMipmapped,
+                                              desc.fBudgeted,
                                               desc.fProtected),
                             true, GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced};
                 },

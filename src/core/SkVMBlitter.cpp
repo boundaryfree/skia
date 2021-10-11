@@ -78,7 +78,7 @@ namespace {
 
             skvm::PixelFormat fmt = skvm::SkColorType_to_PixelFormat(ct);
 
-            skvm::Color c = p->load(fmt, p->arg(SkColorTypeBytesPerPixel(ct)));
+            skvm::Color c = p->load(fmt, p->varying(SkColorTypeBytesPerPixel(ct)));
 
             return SkColorSpaceXformSteps{fSprite, dst}.program(p, uniforms, c);
         }
@@ -114,7 +114,8 @@ namespace {
                 case    kGray_8_SkColorType:
                 case  kRGB_888x_SkColorType:
                 case kRGBA_8888_SkColorType:
-                case kBGRA_8888_SkColorType:    rate =  1/255.0f; break;
+                case kBGRA_8888_SkColorType:
+                case kSRGBA_8888_SkColorType:   rate =  1/255.0f; break;
                 case kRGB_101010x_SkColorType:
                 case kRGBA_1010102_SkColorType:
                 case kBGR_101010x_SkColorType:
@@ -289,7 +290,7 @@ SkVMBlitter::Params SkVMBlitter::EffectiveParams(const SkPixmap& device,
 
 skvm::Color SkVMBlitter::DstColor(skvm::Builder* p, const Params& params) {
     skvm::PixelFormat dstFormat = skvm::SkColorType_to_PixelFormat(params.dst.colorType());
-    skvm::Ptr dst_ptr = p->arg(SkColorTypeBytesPerPixel(params.dst.colorType()));
+    skvm::Ptr dst_ptr = p->varying(SkColorTypeBytesPerPixel(params.dst.colorType()));
     return p->load(dstFormat, dst_ptr);
 }
 
@@ -297,7 +298,7 @@ void SkVMBlitter::BuildProgram(skvm::Builder* p, const Params& params,
                                skvm::Uniforms* uniforms, SkArenaAlloc* alloc) {
     // First two arguments are always uniforms and the destination buffer.
     uniforms->base    = p->uniform();
-    skvm::Ptr dst_ptr = p->arg(SkColorTypeBytesPerPixel(params.dst.colorType()));
+    skvm::Ptr dst_ptr = p->varying(SkColorTypeBytesPerPixel(params.dst.colorType()));
     // A SpriteShader (in this file) may next use one argument as its varying source.
     // Subsequent arguments depend on params.coverage:
     //    - Full:      (no more arguments)
@@ -323,25 +324,12 @@ void SkVMBlitter::BuildProgram(skvm::Builder* p, const Params& params,
         src.b = min(src.b * M + A, src.a);
     }
 
-    // If we can determine this we can skip a fair bit of clamping!
-    bool src_in_gamut = false;
-
-    // Normalized premul formats can surprisingly represent some out-of-gamut
-    // values (e.g. r=0xff, a=0xee fits in unorm8 but r = 1.07), but most code
-    // working with normalized premul colors is not prepared to handle r,g,b > a.
-    // So we clamp the shader to gamut here before blending and coverage.
-    //
-    // In addition, GL clamps all its color channels to limits of the format just
-    // before the blend step (~here).  To match that auto-clamp, we clamp alpha to
-    // [0,1] too, just in case someone gave us an out of range alpha.
-    if (!src_in_gamut
-            && params.dst.alphaType() == kPremul_SkAlphaType
-            && SkColorTypeIsNormalized(params.dst.colorType())) {
-        src.a = clamp(src.a, 0.0f,  1.0f);
-        src.r = clamp(src.r, 0.0f, src.a);
-        src.g = clamp(src.g, 0.0f, src.a);
-        src.b = clamp(src.b, 0.0f, src.a);
-        src_in_gamut = true;
+    // GL clamps all its color channels to limits of the format just before the blend step (~here).
+    // TODO: Below, we also clamp after the blend step. If we can prove that none of the work here
+    // (especially blending, for built-in blend modes) will produce colors outside [0, 1] we may be
+    // able to skip the second clamp. For now, we clamp twice.
+    if (SkColorTypeIsNormalized(params.dst.colorType())) {
+        src = clamp01(src);
     }
 
     // Load the destination color.
@@ -424,17 +412,7 @@ void SkVMBlitter::BuildProgram(skvm::Builder* p, const Params& params,
     }
 
     // Clamp to fit destination color format if needed.
-    if (as_blendmode && src_in_gamut) {
-        // An in-gamut src blended with an in-gamut dst should stay in gamut.
-        // Being in-gamut implies all channels are in [0,1], so no need to clamp.
-        // We allow one ulp error above 1.0f, and about that much (~1.2e-7) below 0.
-        skvm::F32 lo = pun_to_F32(p->splat(0xb400'0000)),
-                  hi = pun_to_F32(p->splat(0x3f80'0001));
-        assert_true(src.r == clamp(src.r, lo, hi), src.r);
-        assert_true(src.g == clamp(src.g, lo, hi), src.g);
-        assert_true(src.b == clamp(src.b, lo, hi), src.b);
-        assert_true(src.a == clamp(src.a, lo, hi), src.a);
-    } else if (SkColorTypeIsNormalized(params.dst.colorType())) {
+    if (SkColorTypeIsNormalized(params.dst.colorType())) {
         src = clamp01(src);
     }
 
@@ -556,7 +534,7 @@ SkVMBlitter::SkVMBlitter(const SkPixmap& device,
                          bool* ok)
         : fDevice(device), fSprite(sprite ? *sprite : SkPixmap{})
         , fSpriteOffset(spriteOffset)
-        , fUniforms(skvm::Ptr{0}, kBlitterUniformsCount)
+        , fUniforms(skvm::UPtr{{0}}, kBlitterUniformsCount)
         , fParams(EffectiveParams(device, sprite, paint, matrices, std::move(clip)))
         , fKey(CacheKey(fParams, &fUniforms, &fAlloc, ok)) {}
 
@@ -578,14 +556,14 @@ SkVMBlitter::~SkVMBlitter() {
 }
 
 SkLRUCache<SkVMBlitter::Key, skvm::Program>* SkVMBlitter::TryAcquireProgramCache() {
-#if 1 && defined(SKVM_JIT)
+#if defined(SKVM_JIT)
     thread_local static SkLRUCache<Key, skvm::Program> cache{64};
     return &cache;
 #else
-    // iOS in particular does not support thread_local until iOS 9.0.
-        // On the other hand, we'll never be able to JIT there anyway.
-        // It's probably fine to not cache any interpreted programs, anywhere.
-        return nullptr;
+    // iOS now supports thread_local since iOS 9.
+    // On the other hand, we'll never be able to JIT there anyway.
+    // It's probably fine to not cache any interpreted programs, anywhere.
+    return nullptr;
 #endif
 }
 

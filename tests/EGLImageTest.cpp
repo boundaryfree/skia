@@ -9,9 +9,9 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/GrSurfaceFillContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxyPriv.h"
+#include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/gl/GrGLUtil.h"
 #include "tests/Test.h"
@@ -168,7 +168,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
     auto surfaceContext = context0->priv().makeSC(std::move(view), colorInfo);
 
     if (!surfaceContext) {
-        ERRORF(reporter, "Error wrapping external texture in GrSurfaceContext.");
+        ERRORF(reporter, "Error wrapping external texture in SurfaceContext.");
         cleanup(glCtx0, externalTexture.fID, glCtx1.get(), context1, image);
         return;
     }

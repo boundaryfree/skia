@@ -181,9 +181,6 @@ public:
         this->onReplaceClip(rect);
     }
 
-    void androidFramework_setDeviceClipRestriction(SkIRect* mutableClipRestriction) {
-        this->onSetDeviceClipRestriction(mutableClipRestriction);
-    }
     bool clipIsWideOpen() const {
         return this->onClipIsWideOpen();
     }
@@ -220,7 +217,6 @@ protected:
     virtual void onClipShader(sk_sp<SkShader>) {}
     virtual void onClipRegion(const SkRegion& deviceRgn, SkClipOp) {}
     virtual void onReplaceClip(const SkIRect& rect) {}
-    virtual void onSetDeviceClipRestriction(SkIRect* mutableClipRestriction) {}
     virtual bool onClipIsAA() const = 0;
     virtual bool onClipIsWideOpen() const = 0;
     virtual void onAsRgnClip(SkRegion*) const = 0;
@@ -427,7 +423,6 @@ private:
 
     virtual bool forceConservativeRasterClip() const { return false; }
 
-
     // Configure the device's coordinate spaces, specifying both how its device image maps back to
     // the global space (via 'deviceToGlobal') and the initial CTM of the device (via
     // 'localToDevice', i.e. what geometry drawn into this device will be transformed with).
@@ -436,12 +431,16 @@ private:
     // is anchored in the device space. The final device-to-global matrix stored by the SkDevice
     // will include a pre-translation by T(deviceOriginX, deviceOriginY), and the final
     // local-to-device matrix will have a post-translation of T(-deviceOriginX, -deviceOriginY).
-    void setDeviceCoordinateSystem(const SkM44& deviceToGlobal, const SkM44& localToDevice,
-                                   int bufferOriginX, int bufferOriginY);
+    //
+    // Returns false if the final device coordinate space is invalid, in which case the canvas
+    // should discard the device
+    bool SK_WARN_UNUSED_RESULT setDeviceCoordinateSystem(const SkM44& deviceToGlobal,
+                                                         const SkM44& localToDevice,
+                                                         int bufferOriginX, int bufferOriginY);
     // Convenience to configure the device to be axis-aligned with the root canvas, but with a
     // unique origin.
     void setOrigin(const SkM44& globalCTM, int x, int y) {
-        this->setDeviceCoordinateSystem(SkM44(), globalCTM, x, y);
+        SkAssertResult(this->setDeviceCoordinateSystem(SkM44(), globalCTM, x, y));
     }
 
     virtual SkImageFilterCache* getImageFilterCache() { return nullptr; }
@@ -500,17 +499,16 @@ protected:
     void onClipRegion(const SkRegion& globalRgn, SkClipOp op) override;
     void onClipShader(sk_sp<SkShader> shader) override;
     void onReplaceClip(const SkIRect& rect) override;
-    void onSetDeviceClipRestriction(SkIRect* mutableClipRestriction) override;
-    bool onClipIsAA() const override { return this->clip().isAA(); }
+    bool onClipIsAA() const override { return this->clip().fIsAA; }
     bool onClipIsWideOpen() const override {
-        return this->clip().isRect() &&
+        return this->clip().fIsRect &&
                this->onDevClipBounds() == this->bounds();
     }
     void onAsRgnClip(SkRegion* rgn) const override {
         rgn->setRect(this->onDevClipBounds());
     }
     ClipType onGetClipType() const override;
-    SkIRect onDevClipBounds() const override { return this->clip().getBounds(); }
+    SkIRect onDevClipBounds() const override { return this->clip().fClipBounds; }
 
     void drawPaint(const SkPaint& paint) override {}
     void drawPoints(SkCanvas::PointMode, size_t, const SkPoint[], const SkPaint&) override {}
@@ -534,25 +532,29 @@ protected:
 
 private:
     struct ClipState {
-        SkConservativeClip fClip;
-        int fDeferredSaveCount = 0;
+        SkIRect fClipBounds;
+        int fDeferredSaveCount;
+        bool fIsAA;
+        bool fIsRect;
 
-        ClipState() = default;
-        explicit ClipState(const SkConservativeClip& clip) : fClip(clip) {}
+        ClipState(const SkIRect& bounds, bool isAA, bool isRect)
+                : fClipBounds(bounds)
+                , fDeferredSaveCount(0)
+                , fIsAA(isAA)
+                , fIsRect(isRect) {}
+
+        void op(SkClipOp op, const SkM44& transform, const SkRect& bounds,
+                bool isAA, bool fillsBounds);
     };
 
-    const SkConservativeClip& clip() const { return fClipStack.back().fClip; }
-    SkConservativeClip& writableClip();
+    const ClipState& clip() const { return fClipStack.back(); }
+    ClipState& writableClip();
 
     void resetClipStack() {
         fClipStack.reset();
-        fDeviceClipRestriction.setEmpty();
-        ClipState& state = fClipStack.push_back();
-        state.fClip.setRect(this->bounds());
-        state.fClip.setDeviceClipRestriction(&fDeviceClipRestriction);
+        fClipStack.emplace_back(this->bounds(), /*isAA=*/false, /*isRect=*/true);
     }
 
-    SkIRect fDeviceClipRestriction;
     SkSTArray<4, ClipState> fClipStack;
 
     using INHERITED = SkBaseDevice;
